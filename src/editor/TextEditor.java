@@ -90,6 +90,8 @@ public class TextEditor {
     public void addScrollableTextArea() {
         textArea = new JTextArea(50, 50);
         textArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        textArea.setFont(new Font(textArea.getFont().getName(),textArea.getFont().getStyle(),14));
+        //textArea.setLineWrap(true);
 
         scrollableTextArea = new JScrollPane(textArea);
         scrollableTextArea.setBorder(BorderFactory.createEmptyBorder(5, 15, 15, 15));
