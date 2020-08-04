@@ -3,120 +3,342 @@ package editor;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.io.File;
-import java.io.PrintWriter;
+import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.regex.MatchResult;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-public class TextEditor extends JFrame {
+import javax.swing.filechooser.FileNameExtensionFilter;
 
+public class TextEditor {
 
-    private static final long serialVersionUID = 1L;
-    
+    JFrame frame;
+
+    //scrollable text area
     JTextArea textArea;
     JScrollPane scrollableTextArea;
 
-    JPanel controlPanel;
-    JTextField filenameField;
+
+    JPanel topPanel;
+
+    JPanel filePanel;
     JButton saveButton;
-    JButton loadButton;
+    JButton openButton;
+
+    JPanel searchPanel;
+    JTextField searchBar;
+    JButton searchButton;
+    JButton nextMatchButton;
+    JButton previousMatchButton;
+    JCheckBox toggleRegex;
+
 
     JMenuBar menuBar;
 
     JMenu fileMenu;
-    JMenuItem menuSave;
-    JMenuItem menuLoad;
-    JMenuItem menuExit;
+    JMenuItem menuSaveButton;
+    JMenuItem menuOpenButton;
+    JMenuItem menuExitButton;
 
+    JMenu searchMenu;
+    JMenuItem menuSearchButton;
+    JMenuItem menuNextMatch;
+    JMenuItem menuPreviousMatch;
+    JMenuItem menuUseRegex;
+
+
+    JFileChooser chooser;
+
+    ArrayList<MatchResult> searchResults;
+    int currentPosition;
 
     public TextEditor() {
-        setTitle("Text Editor");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(600, 600);
-        setVisible(true);
+        createJFrame();
+        addScrollableTextArea();
 
-        // Initialise text input area and scroll pane
+        addTopPanel();
+        addFilePanelAndButtons();
+        addMenuBarWithFileAndSearch();
+        addSearchBarAndButtons();
+
+        chooser = new JFileChooser();
+        chooser.setName("FileChooser");
+        chooser.addChoosableFileFilter(new FileNameExtensionFilter("Text files", "txt", "csv", "json"));
+        chooser.setAcceptAllFileFilterUsed(false);
+        chooser.setVisible(false);
+
+        frame.add(chooser, BorderLayout.PAGE_END);
+        
+        frame.setVisible(true);
+
+        searchResults = new ArrayList<>();
+        int currentPosition = 0;
+
+        setComponentNames();
+    }
+
+    public void createJFrame() {
+        frame = new JFrame();
+        frame.setTitle("Text Editor");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(600, 600);
+    }
+
+    public void addScrollableTextArea() {
         textArea = new JTextArea(50, 50);
         textArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        textArea.setName("TextArea");
 
         scrollableTextArea = new JScrollPane(textArea);
         scrollableTextArea.setBorder(BorderFactory.createEmptyBorder(5, 15, 15, 15));
-        scrollableTextArea.setName("ScrollPane");
 
-        add(scrollableTextArea, BorderLayout.CENTER);
+        frame.add(scrollableTextArea, BorderLayout.CENTER);
+    }
 
-        // Initialise control panel for saving/loading files
-        controlPanel = new JPanel();
-        controlPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 0, 5));
-        controlPanel.applyComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
+    public void addTopPanel() {
+        topPanel = new JPanel();
+        topPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        topPanel.setLayout(new BorderLayout());
 
-        //where user enters name of file
-        filenameField = new JTextField(20);
-        filenameField.setName("FilenameField");
-        controlPanel.add(filenameField);
+        frame.add(topPanel, BorderLayout.NORTH);
+    }
+
+    public void addFilePanelAndButtons() {
+        filePanel = new JPanel();
+        filePanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        filePanel.applyComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
 
         //write to file in filenameField button
-        saveButton = new JButton("Save");
-        saveButton.addActionListener(actionEvent -> {
-
-            try (PrintWriter printWriter = new PrintWriter(new File(filenameField.getText()))) {
-                printWriter.print(textArea.getText());
-            } catch (Exception ignored) {}
-        });
-        saveButton.setName("SaveButton");
-        controlPanel.add(saveButton);
+        saveButton = new JButton(new ImageIcon("icons/save.png"));
+        saveButton.setPreferredSize(new Dimension(40, 40));
+        saveButton.setToolTipText("Save as...");
+        saveButton.addActionListener(actionEvent -> showSaveDialog());
+        filePanel.add(saveButton);
 
         //load the file in filenameField
-        loadButton = new JButton("Load");
-        loadButton.addActionListener(actionEvent -> {
-            textArea.setText(null);
-            try {
-                textArea.setText(new String(Files.readAllBytes(Paths.get(filenameField.getText()))));
-            } catch (Exception ignored) {}
-        });
-        loadButton.setName("LoadButton");
-        controlPanel.add(loadButton);
-
-        //control panel added to JFrame
-        add(controlPanel, BorderLayout.NORTH);
-
+        openButton = new JButton(new ImageIcon("icons/open.png"));
+        openButton.setPreferredSize(new Dimension(40, 40));
+        openButton.setToolTipText("Open file...");
+        openButton.addActionListener(actionEvent -> showOpenDialog());
+        filePanel.add(openButton);
+        
+        topPanel.add(filePanel, BorderLayout.WEST);
+    }
+    
+    public void addMenuBarWithFileAndSearch() {
         menuBar = new JMenuBar();
-        setJMenuBar(menuBar);
+        frame.setJMenuBar(menuBar);
         
         fileMenu = new JMenu("File");
-        fileMenu.setName("MenuFile");
         fileMenu.setMnemonic(KeyEvent.VK_F);
 
-        menuSave = new JMenuItem("Save");
-        menuSave.setName("MenuSave");
-        menuSave.addActionListener(actionEvent -> {
+        menuSaveButton = new JMenuItem("Save");
+        menuSaveButton.addActionListener(actionEvent -> showSaveDialog());
+        fileMenu.add(menuSaveButton);
 
-            try (PrintWriter printWriter = new PrintWriter(new File(filenameField.getText()))) {
-                printWriter.print(textArea.getText());
-            } catch (Exception ignored) {}
-        });
-        fileMenu.add(menuSave);
+        menuOpenButton = new JMenuItem("Load");
+        menuOpenButton.addActionListener(actionEvent -> showOpenDialog());
+        fileMenu.add(menuOpenButton);
 
-
-        menuLoad = new JMenuItem("Load");
-        menuLoad.setName("MenuLoad");
-        menuLoad.addActionListener(actionEvent -> {
-            textArea.setText(null);
-            try {
-                textArea.setText(new String(Files.readAllBytes(Paths.get(filenameField.getText()))));
-            } catch (Exception ignored) {}
-        });
-        fileMenu.add(menuLoad);
-
-        menuExit = new JMenuItem("Exit");
-        menuExit.setName("MenuExit");
-        menuExit.addActionListener(actionEvent -> dispose());
-        fileMenu.add(menuExit);
+        menuExitButton = new JMenuItem("Exit");
+        menuExitButton.addActionListener(actionEvent -> frame.dispose());
+        fileMenu.add(menuExitButton);
         
         menuBar.add(fileMenu);
 
 
-        setVisible(true);
+        searchMenu = new JMenu("Search");
+
+        menuSearchButton = new JMenuItem("Search");
+        menuSearchButton.addActionListener(actionEvent -> startSearch(toggleRegex.isSelected(), searchBar.getText(), textArea.getText()));
+        searchMenu.add(menuSearchButton);
+
+        menuNextMatch = new JMenuItem("Next match");
+        menuNextMatch.addActionListener(actionEvent -> getNextMatch());
+        searchMenu.add(menuNextMatch);
+
+        menuPreviousMatch = new JMenuItem("Previous match");
+        menuPreviousMatch.addActionListener(actionEvent -> getPreviousMatch());
+        searchMenu.add(menuPreviousMatch);
+
+        menuUseRegex = new JMenuItem("Use regex");
+        menuUseRegex.addActionListener(actionEvent -> toggleRegex.setSelected(!toggleRegex.isSelected()));
+        searchMenu.add(menuUseRegex);
+        
+        menuBar.add(searchMenu);
+    }
+
+    public void addSearchBarAndButtons() {
+        searchPanel = new JPanel();
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        searchPanel.applyComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
+
+        searchBar = new JTextField();
+        searchBar.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 0));
+        searchBar.setPreferredSize(new Dimension(200,35));
+        searchBar.setToolTipText("Type here...");
+        searchPanel.add(searchBar);
+        
+        searchButton = new JButton(new ImageIcon("icons/search.png"));
+        searchButton.setPreferredSize(new Dimension(60, 35));
+        searchButton.setToolTipText("Search");
+        searchButton.addActionListener(actionEvent -> startSearch(toggleRegex.isSelected(), searchBar.getText(), textArea.getText()));
+        searchPanel.add(searchButton);
+
+        previousMatchButton = new JButton((new ImageIcon("icons/previous.png")));
+        previousMatchButton.setPreferredSize(new Dimension(35, 35));
+        previousMatchButton.setToolTipText("Previous result");
+        previousMatchButton.addActionListener(actionEvent -> getPreviousMatch());
+        searchPanel.add(previousMatchButton);
+
+        nextMatchButton = new JButton((new ImageIcon("icons/next.png")));
+        nextMatchButton.setPreferredSize(new Dimension(35, 35));
+        nextMatchButton.setToolTipText("Next Result");
+        nextMatchButton.addActionListener(actionEvent -> getNextMatch());
+        searchPanel.add(nextMatchButton);
+
+        toggleRegex = new JCheckBox();
+        searchPanel.add(new JLabel("Use Regex"));
+        searchPanel.add(toggleRegex);
+
+        topPanel.add(searchPanel, BorderLayout.EAST);
+        
+    }
+
+    public void showSaveDialog() {
+        chooser.setVisible(true);
+        int returnValue = chooser.showSaveDialog(null);
+        
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            try (FileWriter fw = new FileWriter(chooser.getSelectedFile())){
+                fw.write(textArea.getText());
+            } catch (Exception ignored) {} 
+        }
+        chooser.setVisible(false);
+    }
+
+    public void showOpenDialog() {
+        chooser.setVisible(true);
+        textArea.setText(null);
+        int returnValue = chooser.showOpenDialog(null);
+        
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            try {
+                textArea.setText(new String(Files.readAllBytes(Paths.get(chooser.getSelectedFile().getAbsolutePath()))));
+            } catch (Exception ignored) {}
+        
+        }
+        chooser.setVisible(false);
+    }
+
+    public void startSearch(boolean useRegex, String searchFor, String fileText) {
+        SwingWorker<ArrayList<MatchResult>, Object> searcher = new SwingWorker<ArrayList<MatchResult>, Object>() {
+
+			@Override
+			protected ArrayList<MatchResult> doInBackground() throws Exception {
+                ArrayList<MatchResult> matches = new ArrayList<>();
+
+                Pattern pattern = Pattern.compile(searchFor, useRegex ? Pattern.CASE_INSENSITIVE : Pattern.LITERAL);
+                Matcher matcher = pattern.matcher(fileText);
+
+                while (matcher.find()) {
+                    matches.add(matcher.toMatchResult());
+                }
+                return matches;
+            }
+            
+            protected void done() {
+
+                try {
+                    searchResults.clear();
+                    searchResults = get();
+                    currentPosition = 0;
+
+                    int index = searchResults.get(currentPosition).start();
+                    String foundText = searchResults.get(currentPosition).group();
+    
+                    textArea.setCaretPosition(index + foundText.length());
+                    textArea.select(index, index + foundText.length());
+                    textArea.grabFocus();
+
+                } catch (Exception ignored) {}
+            }
+
+        };
+        searcher.execute();
+    }
+
+    public void getNextMatch() {
+        try {
+            if (!searchResults.isEmpty()) {
+
+                if (currentPosition == searchResults.size() - 1) {
+                    currentPosition = 0;
+                } else {
+                    currentPosition++;
+                }
+                
+                int index = searchResults.get(currentPosition).start();
+                String foundText = searchResults.get(currentPosition).group();
+
+                textArea.setCaretPosition(index + foundText.length());
+                textArea.select(index, index + foundText.length());
+                textArea.grabFocus();
+
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public void getPreviousMatch() {
+        try {
+            if (!searchResults.isEmpty()) {
+
+                if (currentPosition == 0) {
+                    currentPosition = searchResults.size() - 1;
+                } else {
+                    currentPosition--;
+                }
+                
+                int index = searchResults.get(currentPosition).start();
+                String foundText = searchResults.get(currentPosition).group();
+
+                textArea.setCaretPosition(index + foundText.length());
+                textArea.select(index, index + foundText.length());
+                textArea.grabFocus();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public void setComponentNames() {
+        //frame.setName();
+
+
+        textArea.setName("TextArea");
+        scrollableTextArea.setName("ScrollPane");
+
+
+        saveButton.setName("SaveButton");
+        openButton.setName("OpenButton");
+
+        searchBar.setName("SearchField");
+        searchButton.setName("StartSearchButton");
+        nextMatchButton.setName("NextMatchButton");
+        previousMatchButton.setName("PreviousMatchButton");
+        toggleRegex.setName("UseRegExCheckbox");
+
+        fileMenu.setName("MenuFile");
+        menuSaveButton.setName( "MenuSave");
+        menuOpenButton.setName("MenuOpen");
+        menuExitButton.setName("MenuExit");
+        searchMenu.setName("MenuSearch");
+        menuSearchButton.setName("MenuStartSearch");
+        menuNextMatch.setName("MenuNextMatch");
+        menuPreviousMatch.setName("MenuPreviousMatch");
+        menuUseRegex.setName("MenuUseRegExp");
+
+
+        chooser.setName("FileChooser");
     }
 }
